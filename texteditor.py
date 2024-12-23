@@ -1,73 +1,143 @@
+import subprocess
 from tkinter import *
-
-from utils.fonts import font_courier, font_helvetica
-from utils.file_save import save_as
+from tkinter import filedialog, messagebox
+import os
 
 # Main Window Config
 root = Tk()
-root.title("Python Text Editor")
+root.title("Python Code Editor")
 root.geometry('900x800')
-root.maxsize(900, 800)
-root.minsize(600, 500)
-root.config(bg='#066686')
+root.resizable(False, False)
 
-# Configure Grid to Scale
-root.columnconfigure(0, weight=1) # Left Frame takes some space
-root.columnconfigure(1, weight=4) # Right Frame (text editor) scales more
-root.rowconfigure(0, weight=1) # Allow vertical scaling
+# Variables
+scripts_list = []  # List to manage open scripts
+current_script = None  # Track the currently opened script
 
-# Left Frame (Controls)
-left_frame = Frame(root, bg='#0b546f', padx=10, pady=10)
-left_frame.grid(row=0, column=0, sticky="ns")  # Sticky makes it stretch vertically
+# Function to Run Script and Show Output
+def run_script():
+    if not current_script:
+        messagebox.showwarning("No Script", "No script is open to run.")
+        return
 
-# Right Frame (Text Editor)
-right_frame = Frame(root, bg='#066686', padx=10, pady=10)
-right_frame.grid(row=0, column=1, sticky="nsew")  # Expands to fill space
+    # Save current content to a temporary file
+    temp_file = "temp_script.py"
+    with open(temp_file, "w") as f:
+        f.write(text.get(1.0, END))
 
-# Text Widget in Right Frame
-text = Text(right_frame, wrap='word', font=("Courier", 12), bg='#e0f5fe', fg='#0b546f')
+    # Run the script using subprocess
+    try:
+        result = subprocess.run(
+            ["python", temp_file],
+            capture_output=True,
+            text=True
+        )
+        # Display output in the output text area
+        output_text.delete(1.0, END)
+        output_text.insert(END, result.stdout)
+        if result.stderr:
+            output_text.insert(END, "\nERROR:\n" + result.stderr)
+    except Exception as e:
+        output_text.delete(1.0, END)
+        output_text.insert(END, f"Error running script: {str(e)}")
+    finally:
+        if os.path.exists(temp_file):
+            os.remove(temp_file)
+
+# Function to Save the Current Script
+def save_script():
+    global current_script
+    if current_script:
+        # Overwrite the current script
+        with open(current_script, "w") as f:
+            f.write(text.get(1.0, END))
+        messagebox.showinfo("File Saved", f"File saved to {current_script}")
+    else:
+        # Save as new script
+        filepath = filedialog.asksaveasfilename(defaultextension=".py",
+                                                filetypes=[("Python Files", "*.py")])
+        if filepath:
+            with open(filepath, "w") as f:
+                f.write(text.get(1.0, END))
+            messagebox.showinfo("File Saved", f"File saved to {filepath}")
+            update_scripts_list(filepath)
+
+# Function to Open a Script
+def open_script():
+    filepath = filedialog.askopenfilename(filetypes=[("Python Files", "*.py")])
+    if filepath:
+        with open(filepath, "r") as f:
+            content = f.read()
+        text.delete(1.0, END)
+        text.insert(END, content)
+        update_scripts_list(filepath)
+        global current_script
+        current_script = filepath
+
+# Function to Remove a Script
+def remove_script():
+    global current_script
+    selected_index = scripts_listbox.curselection()
+    if selected_index:
+        selected_file = scripts_list[selected_index[0]]
+        scripts_listbox.delete(selected_index)
+        scripts_list.remove(selected_file)
+        if selected_file == current_script:
+            text.delete(1.0, END)  # Clear the editor if the removed file was active
+            current_script = None
+
+# Function to Update Scripts List
+def update_scripts_list(filepath):
+    if filepath not in scripts_list:
+        scripts_list.append(filepath)
+        scripts_listbox.insert(END, os.path.basename(filepath))
+
+# Function to Display Script When Selected
+def on_script_select(event):
+    global current_script
+    selected_index = scripts_listbox.curselection()
+    if selected_index:
+        selected_file = scripts_list[selected_index[0]]
+        with open(selected_file, "r") as f:
+            content = f.read()
+        text.delete(1.0, END)
+        text.insert(END, content)
+        current_script = selected_file
+
+# Configure Main Layout
+root.columnconfigure(0, weight=1)
+root.rowconfigure(0, weight=1)
+
+# Frames
+left_frame = Frame(root, width=200, bg="#0b546f", padx=10, pady=10)
+left_frame.grid(row=0, column=0, sticky="ns")
+
+right_frame = Frame(root, bg="white", padx=10, pady=10)
+right_frame.grid(row=0, column=1, sticky="nsew")
+
+# Text Editor
+text = Text(right_frame, wrap='word', font=("Courier", 12), bg='white', fg='black')
 text.pack(expand=True, fill='both', padx=5, pady=5)
 
-# Save Button
-save_button = Button(left_frame, text="Save", command=lambda: save_as(text), borderwidth=0)
-save_button.pack(pady=10, fill='x')  # Fills horizontally in left frame
+# Output Window
+output_label = Label(left_frame, text="Output", bg="#0b546f", fg="white")
+output_label.pack()
+output_text = Text(left_frame, height=10, bg="#07364a", fg="white", wrap='word')
+output_text.pack(fill='x', padx=5, pady=5)
 
-# Font Selection Variables
-current_font = StringVar(value="Courier")  # Default font
-font_choice = StringVar(value="Courier")  # Tracks the selected font
+# Scripts List
+scripts_label = Label(left_frame, text="Scripts", bg="#0b546f", fg="white")
+scripts_label.pack()
+scripts_listbox = Listbox(left_frame, bg="white", fg="black", height=10)
+scripts_listbox.pack(fill='x', padx=5, pady=5)
 
-# Create the Menubutton
-font_menu = Menubutton(
-    left_frame,
-    textvariable=current_font,  # Show the current font
-    relief=RAISED,
-    bg='#0b546f',
-    fg='#066686',
-    borderwidth=0,
-    width=10  # Fixed width to prevent resizing
-)
-font_menu.menu = Menu(font_menu, tearoff=0)
-font_menu["menu"] = font_menu.menu
+# Bind Selection Event for Listbox
+scripts_listbox.bind("<<ListboxSelect>>", on_script_select)
 
-# Add Checkbuttons for Fonts (Linked to `font_choice`)
-font_menu.menu.add_radiobutton(
-    label="Courier",
-    variable=font_choice,
-    value="Courier",
-    command=font_courier(text, current_font, font_choice)
-)
-font_menu.menu.add_radiobutton(
-    label="Helvetica",
-    variable=font_choice,
-    value="Helvetica",
-    command=font_helvetica(text, current_font, font_choice)
-)
+# Buttons
+Button(left_frame, text="Run Script", fg='#07364a', command=run_script).pack(fill='x', pady=5)
+Button(left_frame, text="Save Script", fg='#07364a', command=save_script).pack(fill='x', pady=5)
+Button(left_frame, text="Open Script", fg='#07364a', command=open_script).pack(fill='x', pady=5)
+Button(left_frame, text="Remove Script", fg='#07364a', command=remove_script).pack(fill='x', pady=5)
 
-font_menu.pack(pady=10, fill='x')
-
-# Additional Controls Placeholder
-Label(left_frame, text="File Manager", bg='#0b546f', fg='white').pack(pady=10, fill='x')
-Button(left_frame, text="Open File", borderwidth=0, command=lambda: print("Open File")).pack(pady=5, fill='x')
-Button(left_frame, text="New File", borderwidth=0, command=lambda: print("New File")).pack(pady=5, fill='x')
-
+# Run the Application
 root.mainloop()
