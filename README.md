@@ -20,7 +20,6 @@ The application features a text editor, script management, and an output window 
 ### Clone the Repository:
 ```
 git clone https://github.com/finsherwell/Python-TextEditor.git
-cd python-code-editor
 ```
 
 ### Run the application:
